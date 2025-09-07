@@ -1,0 +1,20 @@
+{
+  "name": "instatext",
+  "version": "1.0.0",
+  "description": "A full-stack chat app built with Next.js, React, and Tailwind CSS",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["chat", "websocket", "react", "nextjs", "express", "postgresql"],
+  "author": "",
+  "license": "MIT"
+}
+
+
