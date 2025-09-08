@@ -1,6 +1,6 @@
 # 💬 InstaText
 
-A modern, real-time chat application built with cutting-edge web technologies. InstaText provides instant messaging capabilities with a clean, responsive interface and real-time communication powered by WebSockets.
+A modern, real-time text messaging application built with cutting-edge web technologies. InstaText provides instant messaging capabilities with a clean, responsive interface and real-time communication powered by WebSockets.
 
 ![InstaText](https://img.shields.io/badge/Status-Active-brightgreen)
 ![Node.js](https://img.shields.io/badge/Node.js-16+-green)
@@ -11,11 +11,13 @@ A modern, real-time chat application built with cutting-edge web technologies. I
 
 - 🚀 **Real-time messaging** with WebSocket connections
 - 💻 **Modern UI** built with React and Tailwind CSS
-- 🔄 **Live connection status** indicators
+- 🔄 **Live connection status** indicators with visual feedback
 - 📱 **Responsive design** for all devices
 - 🗄️ **PostgreSQL database** for message persistence
 - ⚡ **Fast development** with hot reloading
 - 🛡️ **CORS enabled** for cross-origin requests
+- 📋 **About modal** with app information
+- 🎯 **Simplified user experience** - no login required
 
 ## 🛠️ Tech Stack
 
@@ -30,7 +32,6 @@ A modern, real-time chat application built with cutting-edge web technologies. I
 - **Express.js** - Web application framework
 - **WebSocket (ws)** - Real-time bidirectional communication
 - **PostgreSQL** - Relational database
-- **CORS** - Cross-origin resource sharing
 
 ## 📁 Project Structure
 
@@ -38,6 +39,7 @@ A modern, real-time chat application built with cutting-edge web technologies. I
 instatext/
 ├── 📁 client/                 # Next.js frontend application
 │   ├── 📁 components/         # Reusable React components
+│   │   ├── About.jsx          # About modal component
 │   │   ├── ConnectionStatus.jsx
 │   │   └── MessageBubble.jsx
 │   ├──  pages/             # Next.js pages
@@ -115,17 +117,25 @@ npm run dev:client
 
 ### 4. Access the Application
 
-- 🌐 **Frontend**: [http://localhost:3000](http://localhost:3000)
--  **Backend API**: [http://localhost:4000](http://localhost:4000)
+- 🌐 **Frontend**: [http://localhost:3000](http://localhost:3000) (or 3001 if 3000 is in use)
+- 🔧 **Backend API**: [http://localhost:4000](http://localhost:4000)
 - ❤️ **Health Check**: [http://localhost:4000/health](http://localhost:4000/health)
--  **WebSocket**: `ws://localhost:4000`
+- 🔌 **WebSocket**: `ws://localhost:4000`
+
+### 5. How to Use
+
+1. **Open the app** in your browser
+2. **Select a user** from the list to start texting
+3. **Type messages** and press Enter or click Send
+4. **Messages appear instantly** in real-time across all open tabs
+5. **Check connection status** - green dot means connected, red means disconnected
 
 ## 📡 API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/health` | Health check endpoint |
-| `GET` | `/api/messages/:userId` | Get messages for a user |
+| `GET` | `/api/messages/conversation` | Get conversation between users |
 | `POST` | `/api/messages` | Create a new message |
 | `GET` | `/api/users` | Get all users |
 
@@ -133,9 +143,10 @@ npm run dev:client
 
 | Event | Description | Data |
 |-------|-------------|------|
-| `connection` | Client connects to server | - |
-| `chat` | Send/receive chat messages | `{ message, user, timestamp }` |
-| `ping` | Connection health check | - |
+| `connection` | Client connects to server | `{ type: 'connection', message: string, clientId: string }` |
+| `chat` | Send/receive text messages | `{ type: 'chat', from: number, to: number, content: string, timestamp: string }` |
+| `ping` | Connection health check | `{ type: 'ping' }` |
+| `pong` | Server response to ping | `{ type: 'pong', timestamp: string }` |
 | `disconnect` | Client disconnects | - |
 
 ## 🎯 Available Scripts
@@ -165,8 +176,11 @@ npm run dev:client
 
 ## 🚧 Roadmap
 
+- [x] Real-time messaging with WebSockets
+- [x] Message persistence in database
+- [x] Connection status indicators
+- [x] About modal with app information
 - [ ] User authentication and authorization
-- [ ] Message persistence in database
 - [ ] User profiles and avatars
 - [ ] File/image sharing
 - [ ] Message encryption
@@ -186,14 +200,8 @@ npm run dev:client
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-##  Acknowledgments
-
-- Built with ❤️ using modern web technologies
-- Inspired by popular messaging applications
-- Thanks to the open-source community for amazing tools and libraries
-
 ---
 
-**Happy Chatting! 💬**
+**Happy Texting! 💬**
 
 
