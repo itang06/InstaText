@@ -2,26 +2,20 @@ import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import MessageBubble from '../components/MessageBubble'
 import ConnectionStatus from '../components/ConnectionStatus'
+import About from '../components/About'
 
 export default function Home() {
   const [messages, setMessages] = useState([])
   const [inputMessage, setInputMessage] = useState('')
   const [users, setUsers] = useState([])
-  const [me, setMe] = useState(null) // { id, username }
   const [peer, setPeer] = useState(null) // { id, username }
+  const [isConnected, setIsConnected] = useState(false)
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
   const messagesEndRef = useRef(null)
+  const wsRef = useRef(null)
 
   const API_URL = process.env.API_URL || 'http://localhost:4000/api'
 
-  const upsertUser = async (username) => {
-    const res = await fetch(`${API_URL}/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username })
-    })
-    if (!res.ok) throw new Error('Failed to upsert user')
-    return res.json()
-  }
 
   const fetchUsers = async () => {
     const res = await fetch(`${API_URL}/users`)
@@ -29,10 +23,6 @@ export default function Home() {
     const userList = await res.json()
     setUsers(userList)
     
-    // Always use user ID 1 as "me" (hardcoded)
-    if (!me) {
-      setMe({ id: 1, username: 'You' })
-    }
   }
 
   const selectPeer = (user) => {
@@ -40,9 +30,9 @@ export default function Home() {
   }
 
   const loadConversation = async () => {
-    if (!me?.id || !peer?.id) return
+    if (!peer?.id) return
     const url = new URL(`${API_URL}/messages/conversation`)
-    url.searchParams.set('userId', String(me.id))
+    url.searchParams.set('userId', '1')
     url.searchParams.set('peerId', String(peer.id))
     const res = await fetch(url.toString())
     if (!res.ok) throw new Error('Failed to fetch conversation')
@@ -50,9 +40,9 @@ export default function Home() {
     const mapped = rows.map(r => ({
       id: r.id,
       content: r.content,
-      from: r.sender_id === me.id ? 'me' : 'peer',
+      from: r.sender_id === 1 ? 'me' : 'peer',
       timestamp: new Date().toISOString(), // Use current time since no created_at column
-      isOwn: r.sender_id === me.id
+      isOwn: r.sender_id === 1
     }))
     setMessages(mapped)
   }
@@ -62,10 +52,103 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (me && peer) {
+    if (peer) {
       loadConversation().catch(console.error)
     }
-  }, [me, peer])
+  }, [peer])
+
+  // WebSocket connection
+  const connectWebSocket = () => {
+    try {
+      console.log('Attempting to connect to WebSocket')
+      wsRef.current = new WebSocket('ws://localhost:4000')
+      
+      wsRef.current.onopen = () => {
+        console.log('WebSocket connected successfully')
+        setIsConnected(true)
+      }
+      
+      wsRef.current.onclose = (event) => {
+        console.log('WebSocket disconnected:', event.code, event.reason)
+        setIsConnected(false)
+      }
+      
+      wsRef.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('Received WebSocket message:', data)
+          
+          // Handle chat messages
+          if (data.type === 'chat') {
+            console.log('Processing chat message:', {
+              from: data.from,
+              to: data.to,
+              me: 1,
+              peer: peer?.id,
+              content: data.content
+            })
+            
+            // Add message if it's for the current conversation
+            if (peer && (
+              (data.from === peer.id && data.to === 1) || // Message TO me FROM peer
+              (data.from === 1 && data.to === peer.id)    // Message FROM me TO peer
+            )) {
+              console.log('✅ Adding message to conversation')
+              setMessages(prev => [...prev, {
+                id: Date.now() + Math.random(),
+                content: data.content,
+                from: data.from === 1 ? 'me' : 'peer',
+                timestamp: data.timestamp,
+                isOwn: data.from === 1
+              }])
+            } else {
+              console.log('Message not for current conversation')
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error)
+        }
+      }
+      
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket error:', error)
+        console.error('Error details:', error.type, error.target?.readyState)
+      }
+    } catch (error) {
+      console.error('Failed to create WebSocket connection:', error)
+      setIsConnected(false)
+    }
+  }
+
+  useEffect(() => {
+    // Test server connectivity first
+    const testServerConnection = async () => {
+      try {
+        console.log('🔍 Testing server connection...')
+        const response = await fetch('http://localhost:4000/health')
+        if (response.ok) {
+          console.log('Server is reachable, connecting WebSocket')
+          connectWebSocket()
+        } else {
+          console.log('Server responded with error:', response.status)
+          setIsConnected(false)
+        }
+      } catch (error) {
+        console.log('Server is not reachable:', error.message)
+        console.log('Will retry WebSocket connection anyway...')
+        connectWebSocket()
+      }
+    }
+
+    testServerConnection()
+
+    // Cleanup when component unmounts
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close(1000, 'Component unmounting') // Manual close
+      }
+    }
+  }, []) // Empty dependency array - only run once on mount
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -73,14 +156,23 @@ export default function Home() {
   }, [messages])
 
   const sendMessage = async () => {
-    if (!inputMessage.trim() || !me?.id || !peer?.id) return
+    if (!inputMessage.trim() || !peer?.id) return
 
     const content = inputMessage.trim()
 
-    // optimistic update
-    const tempId = Date.now()
+    // Send via WebSocket for real-time delivery
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'chat',
+        content: content,
+        from: 1,
+        to: peer.id
+      }))
+    }
+
+    // Add to local messages immediately (optimistic update)
     setMessages(prev => [...prev, {
-      id: tempId,
+      id: Date.now(),
       content,
       from: 'me',
       timestamp: new Date().toISOString(),
@@ -88,17 +180,16 @@ export default function Home() {
     }])
     setInputMessage('')
 
+    // Also save to database
     try {
       const res = await fetch(`${API_URL}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ senderId: me.id, receiverId: peer.id, content })
+        body: JSON.stringify({ senderId: 1, receiverId: peer.id, content })
       })
       if (!res.ok) throw new Error('Failed to send message')
-      // reload conversation to get canonical IDs/order
-      await loadConversation()
     } catch (e) {
-      console.error(e)
+      console.error('Failed to save message to database:', e)
     }
   }
 
@@ -123,7 +214,15 @@ export default function Home() {
         <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <h1 className="text-xl font-bold text-gray-900">InstaText</h1>
-            <button className="text-sm px-4 py-2 rounded-md border bg-gray-400 text-white">{"About"}</button>
+            <div className="flex items-center space-x-4">
+              <ConnectionStatus isConnected={isConnected} />
+              <button 
+                onClick={() => setIsAboutOpen(true)}
+                className="text-sm px-4 py-2 rounded-md border bg-gray-400 text-white hover:bg-gray-500 transition-colors"
+              >
+                About
+              </button>
+            </div>
           </div>
         </header>
 
@@ -131,7 +230,7 @@ export default function Home() {
         <main className="flex-1 max-w-4xl mx-auto w-full flex flex-col">
           {/* User Selection */}
           <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold mb-3">Click a user to start chatting:</h2>
+            <h2 className="text-lg font-semibold mb-3">Click a user to start texting:</h2>
             <div className="flex flex-wrap gap-2">
               {users.map((user) => (
                 <button
@@ -149,7 +248,7 @@ export default function Home() {
             </div>
             {peer && (
               <div className="mt-3 text-sm text-gray-600">
-                Chatting with: <span className="font-semibold">{peer.username}</span>
+                Texting with: <span className="font-semibold">{peer.username}</span>
               </div>
             )}
           </div>
@@ -159,7 +258,7 @@ export default function Home() {
               <div className="flex-1 overflow-y-auto messages-container p-4 space-y-4">
                 {!peer ? (
                   <div className="text-center text-gray-500 mt-8">
-                    <p>Select a user above to start chatting!</p>
+                    <p>Select a user above to start texting!</p>
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="text-center text-gray-500 mt-8">
@@ -187,13 +286,13 @@ export default function Home() {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder={me && peer ? "Type a message..." : "Login and set peer first"}
-                disabled={!me || !peer}
+                placeholder={peer ? "Type a message..." : "Choose a user to chat with..."}
+                disabled={!peer}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <button
                 onClick={sendMessage}
-                disabled={!inputMessage.trim() || !me || !peer}
+                disabled={!inputMessage.trim() || !peer}
                 className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
                 Send
@@ -201,6 +300,12 @@ export default function Home() {
             </div>
           </div>
         </main>
+        
+        {/* About */}
+        <About 
+          isOpen={isAboutOpen} 
+          onClose={() => setIsAboutOpen(false)} 
+        />
       </div>
     </>
   )

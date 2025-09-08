@@ -56,10 +56,11 @@ class WebSocketServer {
     
     switch (message.type) {
       case 'chat':
-        // Placeholder: Broadcast message to all connected clients
+        // Broadcast message to all connected clients with proper user ID
         this.broadcast({
           type: 'chat',
-          from: clientId,
+          from: message.from, // Use the actual user ID from the message
+          to: message.to,     // Include the recipient user ID
           content: message.content,
           timestamp: new Date().toISOString()
         });
